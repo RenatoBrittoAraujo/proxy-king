@@ -12,7 +12,7 @@ Boot up an instance of proxy-king and let it handle that for you, for free!
 
 ### V1
 
-
+![Untitled Diagram drawio](https://user-images.githubusercontent.com/45462822/178123292-f1f7bcc5-4e22-47d9-808a-d3101ebefc4e.png)
 
 ## Caveats 
 
