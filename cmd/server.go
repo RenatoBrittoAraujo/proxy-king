@@ -1,76 +1,60 @@
 package main
 
 import (
+	"flag"
 	"fmt"
-	"io"
-	"log"
-	"net"
-	"net/http"
-	"time"
+	"os"
+	"strconv"
+
+	"github.com/renatobrittoaraujo/proxy-king/internal/config"
+	"github.com/renatobrittoaraujo/proxy-king/internal/proxies"
 )
 
-const (
-	PORT = "8080"
+var (
+	fs *flag.FlagSet
+
+	proxyType string
+	port      int
+	help      bool
+
+	err error
 )
 
-func handleTunneling(w http.ResponseWriter, r *http.Request) {
-	dest_conn, err := net.DialTimeout("tcp", r.Host, 10*time.Second)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	hijacker, ok := w.(http.Hijacker)
-	if !ok {
-		http.Error(w, "Hijacking not supported", http.StatusInternalServerError)
-		return
-	}
-	client_conn, _, err := hijacker.Hijack()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	}
-	go transfer(dest_conn, client_conn)
-	go transfer(client_conn, dest_conn)
-}
+func init() {
+	fs = flag.NewFlagSet("proxy-king", flag.ExitOnError)
 
-func transfer(destination io.WriteCloser, source io.ReadCloser) {
-	defer destination.Close()
-	defer source.Close()
-	io.Copy(destination, source)
-}
-
-func handleHTTP(w http.ResponseWriter, req *http.Request) {
-	resp, err := http.DefaultTransport.RoundTrip(req)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-		return
-	}
-	defer resp.Body.Close()
-	copyHeader(w.Header(), resp.Header)
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
-}
-
-func copyHeader(dst, src http.Header) {
-	for k, vv := range src {
-		for _, v := range vv {
-			dst.Add(k, v)
-		}
-	}
+	fs.StringVar(&proxyType, "t", "http", "proxy type - may be 'http' or 'socks5', defaults to http")
+	fs.IntVar(&port, "p", 80, "proxy port - defaults to '80'")
+	fs.BoolVar(&help, "h", false, "shows all commands")
+	fs.Parse(os.Args[1:])
 }
 
 func main() {
-	server := &http.Server{
-		Addr: ":" + PORT,
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == http.MethodConnect {
-				handleTunneling(w, r)
-			} else {
-				handleHTTP(w, r)
-			}
-		}),
+	if help {
+		fs.Usage()
+		return
 	}
 
-	fmt.Println("Listening on port", PORT)
-	log.Fatal(server.ListenAndServe())
+	cfg := &config.Config{
+		ProxyType: proxyType,
+		Port:      strconv.Itoa(port),
+	}
+
+	err = config.ValidateConfig(cfg)
+	if err != nil {
+		fmt.Println("Failed to validate input: ", err)
+	}
+
+	fmt.Println("Proxing port", cfg.Port+"...")
+
+	switch proxyType {
+	case config.HTTP_PROXY:
+		err = proxies.HTTPListen(cfg)
+	case config.SOCKS5_PROXY:
+		fmt.Println("Socks5 is not supported as of now")
+	}
+
+	if err != nil {
+		fmt.Println("Proxy server crashed: ", err)
+	}
 }
