@@ -1,4 +1,4 @@
-package proxies
+package http_proxy
 
 import (
 	"io"

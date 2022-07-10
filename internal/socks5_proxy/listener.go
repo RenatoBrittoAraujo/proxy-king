@@ -1,4 +1,4 @@
-package proxies
+package socks5_proxy
 
 import (
 	"errors"

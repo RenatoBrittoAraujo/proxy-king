@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/renatobrittoaraujo/proxy-king/internal/config"
-	"github.com/renatobrittoaraujo/proxy-king/internal/proxies"
+	"github.com/renatobrittoaraujo/proxy-king/internal/http_proxy"
 )
 
 var (
@@ -40,21 +40,21 @@ func main() {
 		Port:      strconv.Itoa(port),
 	}
 
-	err = config.ValidateConfig(cfg)
+	cfg, err = config.InitializeConfig(cfg)
 	if err != nil {
-		fmt.Println("Failed to validate input: ", err)
+		fmt.Println("Failed to initialize config: ", err)
 	}
 
 	fmt.Println("Proxing port", cfg.Port+"...")
 
 	switch proxyType {
 	case config.HTTP_PROXY:
-		err = proxies.HTTPListen(cfg)
+		err = http_proxy.HTTPListen(cfg)
 	case config.SOCKS5_PROXY:
 		fmt.Println("Socks5 is not supported as of now")
 	}
 
 	if err != nil {
-		fmt.Println("Proxy server crashed: ", err)
+		fmt.Println("Proxy server crashed:", err)
 	}
 }
