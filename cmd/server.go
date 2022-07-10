@@ -2,54 +2,75 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"net"
-	"os"
+	"net/http"
+	"time"
 )
 
 const (
-	CONN_PORT = "80"
-	CONN_TYPE = "tcp"
+	PORT = "8080"
 )
 
-func main() {
-	// Listen for incoming connections.
-	l, err := net.Listen(CONN_TYPE, ":"+CONN_PORT)
+func handleTunneling(w http.ResponseWriter, r *http.Request) {
+	dest_conn, err := net.DialTimeout("tcp", r.Host, 10*time.Second)
 	if err != nil {
-		fmt.Println("Error listening:", err.Error())
-		os.Exit(1)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
 	}
+	w.WriteHeader(http.StatusOK)
+	hijacker, ok := w.(http.Hijacker)
+	if !ok {
+		http.Error(w, "Hijacking not supported", http.StatusInternalServerError)
+		return
+	}
+	client_conn, _, err := hijacker.Hijack()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+	}
+	go transfer(dest_conn, client_conn)
+	go transfer(client_conn, dest_conn)
+}
 
-	// Close the listener when the application closes.
-	defer l.Close()
-	fmt.Println("Listening on " + CONN_PORT)
+func transfer(destination io.WriteCloser, source io.ReadCloser) {
+	defer destination.Close()
+	defer source.Close()
+	io.Copy(destination, source)
+}
 
-	for {
-		// Listen for an incoming connection.
-		conn, err := l.Accept()
-		if err != nil {
-			fmt.Println("Error accepting: ", err.Error())
-			os.Exit(1)
+func handleHTTP(w http.ResponseWriter, req *http.Request) {
+	resp, err := http.DefaultTransport.RoundTrip(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	defer resp.Body.Close()
+	copyHeader(w.Header(), resp.Header)
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
+}
+
+func copyHeader(dst, src http.Header) {
+	for k, vv := range src {
+		for _, v := range vv {
+			dst.Add(k, v)
 		}
-
-		// Handle connections in a new goroutine.
-		go handleRequest(conn)
 	}
 }
 
-// Handles incoming requests.
-func handleRequest(conn net.Conn) {
-	// Make a buffer to hold incoming data.
-	buf := make([]byte, 1024)
-
-	// Read the incoming connection into the buffer.
-	_, err := conn.Read(buf)
-	if err != nil {
-		fmt.Println("Error reading:", err.Error())
+func main() {
+	server := &http.Server{
+		Addr: ":" + PORT,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodConnect {
+				handleTunneling(w, r)
+			} else {
+				handleHTTP(w, r)
+			}
+		}),
 	}
 
-	// Send a response back to person contacting us.
-	conn.Write([]byte("Message received: " + string(buf)))
-
-	// Close the connection when you're done swith it.
-	conn.Close()
+	fmt.Println("Listening on port", PORT)
+	log.Fatal(server.ListenAndServe())
 }

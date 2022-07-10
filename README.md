@@ -1,6 +1,6 @@
 # proxy-king
 
-Self-host a reliable and open source proxy server
+Self-host a reliable and open source http proxy server
 
 ## Why?
 
@@ -17,6 +17,8 @@ Boot up an instance of proxy-king and let it handle that for you, for free!
 ## Caveats 
 
 There was not much though put into security for now, only ease of use. Use with caution.
+
+Notice that only http is supported.
 
 ## Usage
 
